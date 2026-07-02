@@ -19,7 +19,15 @@ router.post('/attendance/scan', async (req, res) => {
   const { qrCode } = req.body;
 
   try {
-    const user = await prisma.user.findUnique({ where: { qrCode } });
+    let userId: string;
+    try {
+      const parsed = JSON.parse(qrCode);
+      userId = parsed.id;
+    } catch {
+      return res.status(400).json({ message: 'Malformed QR code' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
       return res.status(404).json({ message: 'Invalid QR code' });
