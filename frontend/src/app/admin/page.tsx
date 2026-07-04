@@ -1,22 +1,27 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { 
-  CheckCircle, 
-  XCircle, 
-  Shield, 
-  Users, 
-  QrCode, 
-  Megaphone, 
-  FileText, 
-  Layers, 
-  Search, 
-  UserCheck 
+import { useRouter } from "next/navigation";
+import {
+  CheckCircle,
+  XCircle,
+  Shield,
+  Users,
+  QrCode,
+  Megaphone,
+  FileText,
+  Layers,
+  Search,
+  UserCheck
 } from "lucide-react";
 
 type TabOption = "overview" | "approvals" | "attendance" | "announcements";
 
+const ADMIN_ROLES = ["ADMIN", "UNIT_HEAD"];
+
 export default function AdminDashboard() {
+  const router = useRouter();
+  const [authorized, setAuthorized] = useState(false);
   const [activeTab, setActiveTab] = useState<TabOption>("overview");
   const [volunteers, setVolunteers] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -33,10 +38,27 @@ export default function AdminDashboard() {
   const scannerRef = useRef<any>(null);
   const lastScannedRef = useRef<string>("");
 
-  // Fetch all registered volunteers on mount
+  // Client-side guard: keep unauthenticated/non-staff users off this page.
+  // The real enforcement lives server-side (adminRoutes auth middleware) —
+  // this only prevents the dashboard UI from rendering for the wrong audience.
   useEffect(() => {
+    const token = localStorage.getItem("vms_token");
+    const storedUser = localStorage.getItem("vms_user");
+    const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+
+    if (!token || !parsedUser || !ADMIN_ROLES.includes(parsedUser.role)) {
+      router.push("/login");
+      return;
+    }
+
+    setAuthorized(true);
+  }, [router]);
+
+  // Fetch all registered volunteers once authorized
+  useEffect(() => {
+    if (!authorized) return;
     fetchVolunteers();
-  }, []);
+  }, [authorized]);
 
   const fetchVolunteers = async () => {
     try {
@@ -187,6 +209,14 @@ export default function AdminDashboard() {
       (v.department?.toLowerCase() || "").includes(term)
     );
   });
+
+  if (!authorized) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-zinc-950 text-white">
+        Verifying access...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-8 text-zinc-100 sm:px-8">

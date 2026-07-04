@@ -1,8 +1,10 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
+import path from 'path';
 import { prisma } from '../server';
 import fs from 'fs';
+import { authenticate, AuthedRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -11,40 +13,24 @@ if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
 }
 
-// Better storage configuration to keep original file extensions
+// Storage configuration: keep the original extension but never trust the
+// client-supplied filename itself (path traversal via originalname).
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/');
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
+    const safeExt = path.extname(file.originalname).replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10);
+    cb(null, uniqueSuffix + safeExt);
   }
 });
 
 const upload = multer({ storage });
 
-router.post('/setup', upload.single('passportPhoto'), async (req: Request, res: Response): Promise<any> => {
+router.post('/setup', authenticate, upload.single('passportPhoto'), async (req: AuthedRequest, res: Response): Promise<any> => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Unauthorized: No token found' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    
-    // Standardized fallback secret to match authController
-    const jwtSecret = process.env.JWT_SECRET || 'supersecretvmskey2026';
-
-    // 🔥 THE CRITICAL FIX: Verify and decode the token payload first!
-    const decoded = jwt.verify(token, jwtSecret) as any;
-
-    // 💡 DEFENSIVE FIX: Check both common token styles (userId or id)
-    const targetUserId = decoded.userId || decoded.id;
-
-    if (!targetUserId) {
-      return res.status(400).json({ message: 'Invalid token payload: User ID missing' });
-    }
+    const targetUserId = req.user!.id;
 
     const { fullName, phoneNumber, unilagStatus, department } = req.body;
     
@@ -79,6 +65,31 @@ router.post('/setup', upload.single('passportPhoto'), async (req: Request, res: 
     // THIS WILL NOW PRINT THE EXACT ERROR IN YOUR BACKEND TERMINAL IF IT FAILS
     console.error("❌ PROFILE SETUP CRASH LOG:", error);
     return res.status(500).json({ message: 'Internal server error during profile setup' });
+  }
+});
+
+// Issues a short-lived signed token binding this user's id, so the QR badge
+// can't just be recreated by anyone who knows/guesses a user's UUID.
+router.get('/qr-token', authenticate, async (req: AuthedRequest, res: Response): Promise<any> => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    if (user.status !== 'VERIFIED') {
+      return res.status(403).json({ message: 'Profile is not verified yet' });
+    }
+
+    const qrToken = jwt.sign(
+      { sub: user.id, purpose: 'attendance-qr' },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '30d' }
+    );
+
+    return res.status(200).json({ qrToken });
+  } catch (error) {
+    console.error('QR token issuance failed:', error);
+    return res.status(500).json({ message: 'Internal server error while issuing QR token' });
   }
 });
 
