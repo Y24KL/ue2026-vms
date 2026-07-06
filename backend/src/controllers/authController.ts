@@ -88,7 +88,7 @@ export const login = async (req: Request, res: Response) => {
 
 export const adminSignup = async (req: Request, res: Response) => {
   try {
-    const { email, password, fullName, department, role } = req.body;
+    const { email, password, fullName, department } = req.body;
 
     if (!email || !password || !fullName || !department) {
       return res.status(400).json({ message: 'Email, password, full name, and unit are required.' });
@@ -103,7 +103,9 @@ export const adminSignup = async (req: Request, res: Response) => {
       return res.status(409).json({ message: 'An account with this email already exists.' });
     }
 
-    const assignedRole = role === 'ADMIN' ? 'ADMIN' : 'UNIT_HEAD';
+    // This endpoint is public, so the caller can never be trusted to grant themselves
+    // ADMIN. Real admins must be promoted separately by an existing ADMIN (see
+    // PATCH /api/admin/volunteers/:id/role).
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
@@ -112,7 +114,7 @@ export const adminSignup = async (req: Request, res: Response) => {
         password: hashedPassword,
         fullName,
         department,
-        role: assignedRole,
+        role: 'UNIT_HEAD',
         status: 'VERIFIED'
       }
     });

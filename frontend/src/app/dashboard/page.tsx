@@ -8,7 +8,8 @@ import { QRCodeCanvas } from "qrcode.react";
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  
+  const [qrToken, setQrToken] = useState<string | null>(null);
+
   // Countdown State
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
 
@@ -19,10 +20,10 @@ export default function Dashboard() {
     if (!token) {
       router.push("/login");
       return; // Stop execution
-    } 
+    }
 
     const parsedUser = JSON.parse(storedUser || "{}");
-    
+
     // 🚨 THE GUARD: If they haven't set their full name or department yet, kick them to setup
     if (!parsedUser.fullName || !parsedUser.department) {
       router.push("/profile-setup");
@@ -30,6 +31,17 @@ export default function Dashboard() {
     }
 
     setUser(parsedUser);
+
+    // Fetch a server-signed QR token so the badge can't be forged by anyone
+    // who merely knows/guesses the user's id.
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/profile/qr-token`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.qrToken) setQrToken(data.qrToken);
+      })
+      .catch((err) => console.error("Failed to fetch QR token", err));
 
     // ... your existing countdown logic ...
 
@@ -138,30 +150,28 @@ export default function Dashboard() {
               <Shield size={24} />
             </div>
             <h3 className="font-bold text-white">Digital Pass</h3>
-            <button 
+            <button
               onClick={handleDownloadQR}
-              className="mt-3 flex items-center gap-2 rounded-lg bg-purple-600/20 px-4 py-2 text-xs font-bold text-purple-400 transition-all hover:bg-purple-600/30 active:scale-95"
+              disabled={!qrToken}
+              className="mt-3 flex items-center gap-2 rounded-lg bg-purple-600/20 px-4 py-2 text-xs font-bold text-purple-400 transition-all hover:bg-purple-600/30 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
             >
-              <Download size={14} /> Download QR Code 
+              <Download size={14} /> {qrToken ? "Download QR Code" : "Generating pass..."}
             </button>
-            
+
             {/* Hidden Canvas to generate the QR Code Image */}
-            <div className="hidden">
-              <QRCodeCanvas
-                id="qr-badge"
-                value={JSON.stringify({ 
-                  id: user.id || "SYS-001",
-                  email: user.email, 
-                  event: "UE Unilag 2026", 
-                  status: "VERIFIED" 
-                })}
-                size={512}
-                bgColor={"#09090b"} // zinc-950
-                fgColor={"#d97706"} // amber-600 to match the gold aesthetic
-                level={"H"}
-                includeMargin={true}
-              />
-            </div>
+            {qrToken && (
+              <div className="hidden">
+                <QRCodeCanvas
+                  id="qr-badge"
+                  value={qrToken}
+                  size={512}
+                  bgColor={"#09090b"} // zinc-950
+                  fgColor={"#d97706"} // amber-600 to match the gold aesthetic
+                  level={"H"}
+                  includeMargin={true}
+                />
+              </div>
+            )}
           </div>
           
         </div>
