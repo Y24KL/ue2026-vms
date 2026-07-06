@@ -34,6 +34,7 @@ export default function AdminDashboard() {
 
   // QR Attendance Scanner State
   const [isScanning, setIsScanning] = useState(false);
+  const [scanMode, setScanMode] = useState<"IN" | "OUT">("IN");
   const [scanFeedback, setScanFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const scannerRef = useRef<any>(null);
   const lastScannedRef = useRef<string>("");
@@ -130,8 +131,8 @@ export default function AdminDashboard() {
     }
   };
 
-  // Send scanned QR payload to backend to record attendance
-  const markAttendance = async (qrCode: string) => {
+  // Send scanned QR payload to backend to record attendance (mode picks check-in vs check-out)
+  const markAttendance = async (qrCode: string, mode: "IN" | "OUT") => {
     try {
       const token = localStorage.getItem("vms_token");
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/admin/attendance/scan`, {
@@ -140,12 +141,13 @@ export default function AdminDashboard() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ qrCode })
+        body: JSON.stringify({ qrCode, mode })
       });
       const data = await response.json();
 
       if (response.ok) {
-        setScanFeedback({ type: "success", message: `✅ ${data.fullName || "Volunteer"} checked in successfully.` });
+        const verb = data.action === "checked-out" ? "checked out" : "checked in";
+        setScanFeedback({ type: "success", message: `✅ ${data.fullName || "Volunteer"} ${verb} successfully.` });
       } else {
         setScanFeedback({ type: "error", message: data.message || "Scan rejected: duplicate or invalid code." });
       }
@@ -175,7 +177,7 @@ export default function AdminDashboard() {
             // Debounce duplicate reads of the same code within the same session
             if (decodedText === lastScannedRef.current) return;
             lastScannedRef.current = decodedText;
-            markAttendance(decodedText);
+            markAttendance(decodedText, scanMode);
             setTimeout(() => { lastScannedRef.current = ""; }, 3000);
           },
           () => { /* ignore per-frame decode failures */ }
@@ -193,7 +195,7 @@ export default function AdminDashboard() {
         scannerRef.current = null;
       }
     };
-  }, [isScanning, activeTab]);
+  }, [isScanning, activeTab, scanMode]);
 
   // Stats Counters
   const totalVolunteers = volunteers.length;
@@ -434,6 +436,33 @@ export default function AdminDashboard() {
               <h2 className="text-xl font-bold text-white">QR Access Attendance Terminal</h2>
               <p className="text-sm text-zinc-400 mt-2">
                 Scan a volunteer's badge QR code with this device's camera to mark them present. Works on mobile browsers over HTTPS (camera access requires a secure origin).
+              </p>
+
+              {/* Check In / Check Out mode toggle — pick the mode before scanning */}
+              <div className="mt-5 inline-flex rounded-xl bg-zinc-900/60 p-1.5 border border-zinc-800/80">
+                <button
+                  onClick={() => setScanMode("IN")}
+                  className={`rounded-lg px-5 py-2 text-xs font-bold uppercase tracking-wider transition-all ${
+                    scanMode === "IN"
+                      ? "bg-emerald-600 text-zinc-950 shadow-md shadow-emerald-500/10"
+                      : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                  }`}
+                >
+                  Check In
+                </button>
+                <button
+                  onClick={() => setScanMode("OUT")}
+                  className={`rounded-lg px-5 py-2 text-xs font-bold uppercase tracking-wider transition-all ${
+                    scanMode === "OUT"
+                      ? "bg-rose-600 text-zinc-950 shadow-md shadow-rose-500/10"
+                      : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                  }`}
+                >
+                  Check Out
+                </button>
+              </div>
+              <p className="text-xs text-zinc-500 mt-2">
+                Mode: <span className={scanMode === "IN" ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>{scanMode === "IN" ? "Check In" : "Check Out"}</span>
               </p>
 
               {scanFeedback && (

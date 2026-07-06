@@ -87,7 +87,8 @@ router.post('/announcements', (req, res) => {
 });
 
 router.post('/attendance/scan', async (req, res) => {
-  const { qrCode } = req.body;
+  const { qrCode, mode } = req.body;
+  const scanMode = mode === 'OUT' ? 'OUT' : 'IN';
 
   try {
     const jwtSecret = process.env.JWT_SECRET;
@@ -115,6 +116,14 @@ router.post('/attendance/scan', async (req, res) => {
 
     const existing = await prisma.attendance.findUnique({ where: { userId: user.id } });
 
+    if (scanMode === 'OUT') {
+      if (!existing) {
+        return res.status(409).json({ message: 'Not checked in', fullName: user.fullName });
+      }
+      await prisma.attendance.delete({ where: { userId: user.id } });
+      return res.status(200).json({ fullName: user.fullName, action: 'checked-out' });
+    }
+
     if (existing) {
       return res.status(409).json({ message: 'Already checked in', fullName: user.fullName });
     }
@@ -123,7 +132,7 @@ router.post('/attendance/scan', async (req, res) => {
       data: { userId: user.id, scannedBy: (req as AuthedRequest).user?.id }
     });
 
-    return res.status(200).json({ fullName: user.fullName });
+    return res.status(200).json({ fullName: user.fullName, action: 'checked-in' });
   } catch (error) {
     console.error('❌ ATTENDANCE SCAN CRASH:', error);
     return res.status(500).json({ message: 'Internal server error during scan' });
