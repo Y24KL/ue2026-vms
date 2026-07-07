@@ -97,10 +97,10 @@ export default function ProfileSetupPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4 py-12 text-zinc-100">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-zinc-950 px-4 py-12 text-zinc-100">
       {/* Background ambient gold glows */}
-      <div className="absolute top-0 left-1/4 h-96 w-96 rounded-full bg-amber-500/10 blur-[120px]" />
-      <div className="absolute bottom-0 right-1/4 h-96 w-96 rounded-full bg-purple-600/10 blur-[120px]" />
+      <div className="pointer-events-none absolute top-0 left-1/4 h-96 w-96 rounded-full bg-amber-500/10 blur-[120px]" />
+      <div className="pointer-events-none absolute bottom-0 right-1/4 h-96 w-96 rounded-full bg-purple-600/10 blur-[120px]" />
 
       <div className="relative w-full max-w-xl rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-2xl backdrop-blur-xl">
         
